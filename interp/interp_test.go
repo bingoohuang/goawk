@@ -311,6 +311,14 @@ BEGIN {
 	// Other FNR behaviour is tested in goawk_test.go
 	{`BEGIN { print "|" FS "|"; FS="," } { print $1, $2 }`, "a b\na,b\nx,,y", "| |\na b \na b\nx \n", "", ""},
 	{`BEGIN { print "|" FS "|"; FS="\\." } { print $1, $2 }`, "a b\na.b\nx..y", "| |\na b \na b\nx \n", "", ""},
+	// ASCII unit and record separator
+	{`BEGIN { FS="\x1f"; RS="\x1e"; OFS="," } { print $1, $2, $3 }`,
+		"id\x1fname\x1fage\x1e1\x1fBob \"Billy\" Smith\x1f42\x1e2\x1fJane\nBrown\x1f37",
+		"id,name,age\n1,Bob \"Billy\" Smith,42\n2,Jane\nBrown,37\n", "", ""},
+	// Unicode unit and record separator (skip on Windows under gawk due to Unicode command line issues)
+	{`BEGIN { FS="␟"; RS="␞"; OFS="," } { print $1, $2, $3 }  # !windows-gawk`,
+		"id␟name␟age␞1␟Bob \"Billy\" Smith␟42␞2␟Jane\nBrown␟37",
+		"id,name,age\n1,Bob \"Billy\" Smith,42\n2,Jane\nBrown,37\n", "", ""},
 	{`BEGIN { FS="\\" } { print $1, $2 }`, "a\\b", "a b\n", "", ""},
 	{`{ print NF }`, "\na\nc d\ne f g", "0\n1\n2\n3\n", "", ""},
 	{`BEGIN { NR = 123; print NR }`, "", "123\n", "", ""},
@@ -494,7 +502,6 @@ BEGIN {
 	{`BEGIN { print sprintf("%d") }`, "", "", "format error: got 0 args, expected 1", "not enough arg"},
 	{`BEGIN { print sprintf("%d", 12, 34) }`, "", "12\n", "", ""},
 	{`BEGIN { print sprintf("% 5d", 42) }`, "", "   42\n", "", ""},
-	{`BEGIN { print sprintf("%u", -1) }`, "", "18446744073709551615\n", "", ""},
 	{`BEGIN { print sprintf("%*s %.*s", 5, "abc", 5, "abcdefghi") }`, "", "  abc abcde\n", "", ""},
 	{`BEGIN { print substr("food", 1) }`, "", "food\n", "", ""},
 	{`BEGIN { print substr("food", 1, 2) }`, "", "fo\n", "", ""},
@@ -555,6 +562,7 @@ BEGIN {
 	{`BEGIN { print system(">&2 echo error") }  # !fuzz`,
 		"", "error\n0\n", "", ""},
 	{`BEGIN { print system("exit 42") }  # !fuzz`, "", "42\n", "", ""},
+	{`BEGIN { system("cat") }`, "foo\nbar", "foo\nbar", "", ""},
 
 	// Test bytes/unicode handling (GoAWK currently has char==byte, unlike Gawk).
 	{`BEGIN { print match("food", "foo"), RSTART, RLENGTH }  !gawk`, "", "1 1 3\n", "", ""},
@@ -1008,29 +1016,29 @@ BEGIN {
 	print
 	print bool(), bool(0), bool(1), bool(""), bool("0"), bool("x")
 	print i(), i(42), i(-5), i(3.75), i(-3.75)
-	print i8(), i8(42), i8(-5.6), i8(127), i8(128), i8(255), i8(256)
-	print i16(), i16(42), i16(-5.6), i16(32767), i16(32768), i16(65535), i16(65536)
-	print i32(), i32(42), i32(-5.6), i32(2147483647), i32(2147483648), i32(4294967295), i32(4294967296)
+	print i8(), i8(42), i8(-5.6), i8(127), i8(-128)
+	print i16(), i16(42), i16(-5.6), i16(32767), i16(-32768)
+	print i32(), i32(42), i32(-5.6), i32(2147483647), i32(-2147483648)
 	print i64(), i64(42), i64(-5.6), i64(2147483647000), i64(-2147483647000)
-	print u(), u(42), u(-1)
-	print u8(), u8(42), u8(-5.6), u8(127), u8(128), u8(255), u8(256)
-	print u16(), u16(42), u16(-1), u16(65535), u16(65536)
-	print u32(), u32(42), u32(-1), u32(4294967295), u32(4294967296)
-	print u64(), u64(42), u64(-1), u64(4294967296), u64(2147483647000)
+	print u(), u(42), u(0), u(1)
+	print u8(), u8(42), u8(-5.6), u8(127), u8(128), u8(255)
+	print u16(), u16(42), u16(-1), u16(65535)
+	print u32(), u32(42), u32(-1), u32(4294967295)
+	print u64(), u64(42), u64(1), u64(4294967296), u64(2147483647000)
 	print s() "." s("") "." s("Foo bar") "." s(1234)
 	print b() "." b("") "." b("Foo bar") "." b(1234)
 }`, "", `
 0 0 1 0 1 1
 0 42 -5 3 -3
-0 42 -5 127 -128 -1 0
-0 42 -5 32767 -32768 -1 0
-0 42 -5 2147483647 -2147483648 -2147483648 -2147483648
+0 42 -5 127 -128
+0 42 -5 32767 -32768
+0 42 -5 2147483647 -2147483648
 0 42 -5 2147483647000 -2147483647000
-0 42 1.84467e+19
-0 42 251 127 128 255 0
-0 42 65535 65535 0
-0 42 4294967295 4294967295 0
-0 42 1.84467e+19 4294967296 2147483647000
+0 42 0 1
+0 42 251 127 128 255
+0 42 65535 65535
+0 42 4294967295 4294967295
+0 42 1 4294967296 2147483647000
 ..Foo bar.1234
 ..Foo bar.1234
 `, "",

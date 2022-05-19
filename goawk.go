@@ -1,4 +1,4 @@
-// Package goawk is an implementation of AWK written in Go.
+// Package goawk is an implementation of AWK with CSV support
 //
 // You can use the command-line "goawk" command or run AWK from your
 // Go programs using the "interp" package. The command-line program
@@ -23,13 +23,14 @@
 //     102
 //
 // To use GoAWK in your Go programs, see README.md or the "interp"
-// docs.
+// package docs.
 //
 package main
 
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -44,7 +45,7 @@ import (
 )
 
 const (
-	version    = "v1.17.0"
+	version    = "v1.17.1"
 	copyright  = "GoAWK " + version + " - Copyright (c) 2021 Ben Hoyt"
 	shortUsage = "usage: goawk [-F fs] [-v var=value] [-f progfile | 'prog'] [file ...]"
 	longUsage  = `Standard AWK arguments:
@@ -250,6 +251,14 @@ func main() {
 		inputMode += " header"
 	}
 
+	// Don't buffer output if stdout is a terminal (default output writer when
+	// Config.Output is nil is a buffered version of os.Stdout).
+	var stdout io.Writer
+	stdoutInfo, err := os.Stdout.Stat()
+	if err == nil && stdoutInfo.Mode()&os.ModeCharDevice != 0 {
+		stdout = os.Stdout
+	}
+
 	config := &interp.Config{
 		Argv0: filepath.Base(os.Args[0]),
 		Args:  expandWildcardsOnWindows(args),
@@ -258,6 +267,7 @@ func main() {
 			"INPUTMODE", inputMode,
 			"OUTPUTMODE", outputMode,
 		},
+		Output: stdout,
 	}
 	for _, v := range vars {
 		parts := strings.SplitN(v, "=", 2)
